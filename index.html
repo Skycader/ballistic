@@ -1,0 +1,440 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<title>Баллистический прицел</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: full-height instrument — live canvas sight on the left, telemetry/control rail on the right (stacks below on phones). Single dark solarized look by choice. */
+:root{
+  --ink:#00212b;      /* deeper than base03, the void behind the sight */
+  --base03:#002b36;
+  --base02:#073642;
+  --base01:#586e75;
+  --base0:#839496;
+  --base1:#93a1a1;
+  --cyan:#2aa198;
+  --magenta:#d33682;
+  --yellow:#b58900;
+  --orange:#cb4b16;
+  --violet:#6c71c4;
+  --f-display:"Chakra Petch","Segoe UI",system-ui,sans-serif;
+  --f-mono:"IBM Plex Mono",ui-monospace,"SFMono-Regular",Menlo,Consolas,monospace;
+  color-scheme:dark;
+}
+html,body{height:100%}
+body{background:var(--ink);color:var(--base0);font-family:var(--f-mono);font-size:13px;overflow:hidden}
+*{box-sizing:border-box}
+.app{height:100%;display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:12px;padding:12px 16px}
+.stage{position:relative;min-width:0;min-height:0;background:var(--base03);border:1px solid var(--base02);
+  clip-path:polygon(0 0,calc(100% - 22px) 0,100% 22px,100% 100%,22px 100%,0 calc(100% - 22px))}
+.stage canvas{position:absolute;inset:0;width:100%;height:100%;display:block;cursor:crosshair;touch-action:none}
+.stage::after{content:"";position:absolute;inset:0;pointer-events:none;
+  background:repeating-linear-gradient(0deg,rgba(0,0,0,.18) 0 1px,transparent 1px 3px);mix-blend-mode:multiply}
+.hud-top{position:absolute;top:12px;left:16px;right:40px;display:flex;gap:10px;align-items:center;pointer-events:none;z-index:1;flex-wrap:wrap}
+.hud-title{font-family:var(--f-display);font-weight:700;letter-spacing:.18em;text-transform:uppercase;color:var(--base1);font-size:13px}
+.chip{font-family:var(--f-display);font-weight:700;font-size:11px;letter-spacing:.14em;padding:2px 8px;border:1px solid currentColor}
+.chip.live{color:var(--cyan)} .chip.lock{color:var(--magenta)}
+.hint{color:var(--base01);font-size:11px;letter-spacing:.04em}
+
+.rail{min-width:0;min-height:0;overflow-y:auto;display:flex;flex-direction:column;gap:12px}
+.block{background:var(--base03);border:1px solid var(--base02);padding:12px 14px;display:flex;flex-direction:column;gap:10px}
+.block h2{margin:0;font-family:var(--f-display);font-weight:700;font-size:11px;letter-spacing:.2em;text-transform:uppercase;color:var(--base01);
+  display:flex;justify-content:space-between}
+.big{font-family:var(--f-display);font-weight:700;font-size:40px;line-height:1;color:var(--cyan);font-variant-numeric:tabular-nums;
+  text-shadow:0 0 14px rgba(42,161,152,.45)}
+.big small{font-size:16px;color:var(--base01);margin-left:4px}
+dl{margin:0;display:grid;grid-template-columns:1fr auto;gap:6px 10px}
+dt{color:var(--base01);font-size:11px;text-transform:uppercase;letter-spacing:.08em;align-self:center}
+dd{margin:0;text-align:right;color:var(--base1);font-variant-numeric:tabular-nums}
+dd.mag{color:var(--magenta)} dd.yel{color:var(--yellow)} dd.cy{color:var(--cyan)}
+.ctl{display:flex;flex-direction:column;gap:4px}
+.ctl label{display:flex;justify-content:space-between;font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--base01)}
+.ctl label output{color:var(--base1);text-transform:none;letter-spacing:0;font-variant-numeric:tabular-nums}
+input[type=range]{width:100%;accent-color:var(--cyan);margin:0}
+.seg{display:grid;grid-template-columns:repeat(3,1fr);border:1px solid var(--base02)}
+.seg button,.btn{font:inherit;font-family:var(--f-display);font-weight:500;letter-spacing:.08em;background:transparent;color:var(--base0);
+  border:0;padding:7px 4px;cursor:pointer;text-transform:uppercase;font-size:11px}
+.seg button+button{border-left:1px solid var(--base02)}
+.seg button[aria-pressed=true]{background:var(--base02);color:var(--cyan)}
+.btn{border:1px solid var(--magenta);color:var(--magenta);padding:9px}
+.btn[aria-pressed=true]{background:var(--magenta);color:var(--base03)}
+button:focus-visible,input:focus-visible{outline:2px solid var(--yellow);outline-offset:2px}
+.check{display:flex;align-items:center;gap:8px;font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--base1);cursor:pointer}
+.check input{accent-color:var(--cyan);width:15px;height:15px;margin:0}
+.check small{margin-left:auto;color:var(--base01);text-transform:none;letter-spacing:0;font-variant-numeric:tabular-nums}
+.legend{display:flex;flex-direction:column;gap:5px;font-size:11px;color:var(--base0)}
+.legend span{display:flex;align-items:center;gap:8px}
+.sw{width:18px;height:0;border-top:2px solid}
+@media (max-width:760px){
+  body{overflow:auto}
+  .app{grid-template-columns:minmax(0,1fr);height:auto;min-height:100%}
+  .stage{height:62vh;min-height:320px}
+  .rail{overflow:visible}
+}
+</style>
+
+<div class="app">
+  <section class="stage" id="stage">
+    <canvas id="cv" aria-label="Траектория снаряда"></canvas>
+    <div class="hud-top">
+      <span class="hud-title">Sight // траектория</span>
+      <span class="chip live" id="mode">LIVE</span>
+      <span class="hint" id="hint">курсор — наводка · клик — фиксация · ← → точная доводка</span>
+    </div>
+  </section>
+
+  <aside class="rail">
+    <div class="block">
+      <h2><span>Угол возвышения</span><span id="optTag"></span></h2>
+      <div class="big" id="angleBig">0.0<small>°</small></div>
+      <button class="btn" id="lockBtn" aria-pressed="false">Зафиксировать угол</button>
+    </div>
+
+    <div class="block">
+      <h2>Текущий выстрел</h2>
+      <dl>
+        <dt>Точка падения</dt><dd class="mag" id="rRange">—</dd>
+        <dt>Апогей</dt><dd class="cy" id="rApex">—</dd>
+        <dt>Время полёта</dt><dd id="rTime">—</dd>
+        <dt>Скорость у земли</dt><dd id="rVimp">—</dd>
+        <dt>Угол падения</dt><dd id="rAimp">—</dd>
+        <dt>От макс. дальности</dt><dd id="rPct">—</dd>
+      </dl>
+    </div>
+
+    <div class="block">
+      <h2>Предел системы</h2>
+      <dl>
+        <dt>Макс. дальность</dt><dd class="yel" id="mRange">—</dd>
+        <dt>Оптимальный угол</dt><dd class="yel" id="mAngle">—</dd>
+      </dl>
+    </div>
+
+    <div class="block">
+      <h2>Параметры</h2>
+      <div class="ctl">
+        <label for="v0">Начальная скорость <output id="v0o"></output></label>
+        <input type="range" id="v0" min="10" max="600" step="1" value="120">
+      </div>
+      <div class="ctl">
+        <label for="h0">Высота точки выстрела <output id="h0o"></output></label>
+        <input type="range" id="h0" min="0" max="500" step="1" value="0">
+      </div>
+      <div class="ctl">
+        <label for="kd">Сопротивление воздуха <output id="kdo"></output></label>
+        <input type="range" id="kd" min="0" max="40" step="1" value="0">
+      </div>
+      <div class="ctl">
+        <label>Гравитация <output id="go"></output></label>
+        <div class="seg" role="group" aria-label="Гравитация">
+          <button data-g="9.81" aria-pressed="true">Земля</button>
+          <button data-g="3.71" aria-pressed="false">Марс</button>
+          <button data-g="1.62" aria-pressed="false">Луна</button>
+        </div>
+      </div>
+      <label class="check" for="trail"><input type="checkbox" id="trail">Оставлять след апогея<small id="trailN"></small></label>
+    </div>
+
+    <div class="block legend">
+      <span><i class="sw" style="border-color:var(--cyan)"></i>Траектория, точки — каждая отметка времени</span>
+      <span><i class="sw" style="border-color:var(--magenta)"></i>Точка падения</span>
+      <span><i class="sw" style="border-color:var(--yellow);border-top-style:dashed"></i>Траектория максимальной дальности</span>
+    </div>
+  </aside>
+</div>
+
+<script>
+(() => {
+const css = getComputedStyle(document.documentElement);
+const col = n => css.getPropertyValue(n).trim();
+const P = {cy:col('--cyan'),mg:col('--magenta'),yl:col('--yellow'),or:col('--orange'),vi:col('--violet'),
+  b03:col('--base03'),b02:col('--base02'),b01:col('--base01'),b0:col('--base0'),b1:col('--base1')};
+const FD = '"Chakra Petch", system-ui, sans-serif', FM = '"IBM Plex Mono", ui-monospace, monospace';
+
+const S = {v0:120, g:9.81, k:0, h0:0, angle:38, locked:false, cursor:null};
+let cur = null, opt = null, vert = null, view = null;
+const trail = new Map(); // ключ: угол ×10 → [apX, apY]
+
+/* ---------- physics: RK4, quadratic drag a = -k|v|v ---------- */
+function sim(deg, rec){
+  const a = deg*Math.PI/180;
+  let x=0, y=S.h0, vx=S.v0*Math.cos(a), vy=S.v0*Math.sin(a), t=0;
+  const res = {deg, range:0, apX:0, apY:y, t:0, vx, vy, pts: rec ? [[0,y,0]] : null};
+  if (S.h0 <= 0 && deg <= 0) return res;
+  const T0 = (Math.max(vy,0) + Math.sqrt(Math.max(0, vy*vy + 2*S.g*S.h0))) / S.g;
+  const dt = Math.max(T0, 0.05) / 1500;
+  const f = (vx,vy) => { const sp=Math.hypot(vx,vy); return [-S.k*sp*vx, -S.g - S.k*sp*vy]; };
+  for (let i=0; i<40000; i++){
+    const [ax1,ay1]=f(vx,vy);
+    const vx2=vx+ax1*dt/2, vy2=vy+ay1*dt/2; const [ax2,ay2]=f(vx2,vy2);
+    const vx3=vx+ax2*dt/2, vy3=vy+ay2*dt/2; const [ax3,ay3]=f(vx3,vy3);
+    const vx4=vx+ax3*dt,   vy4=vy+ay3*dt;   const [ax4,ay4]=f(vx4,vy4);
+    const nx = x + dt*(vx+2*vx2+2*vx3+vx4)/6;
+    const ny = y + dt*(vy+2*vy2+2*vy3+vy4)/6;
+    const nvx = vx + dt*(ax1+2*ax2+2*ax3+ax4)/6;
+    const nvy = vy + dt*(ay1+2*ay2+2*ay3+ay4)/6;
+    if (ny < 0){
+      const fr = y/(y-ny);
+      x += (nx-x)*fr; t += dt*fr; vx += (nvx-vx)*fr; vy += (nvy-vy)*fr; y = 0;
+      if (rec) res.pts.push([x,0,t]);
+      break;
+    }
+    x=nx; y=ny; vx=nvx; vy=nvy; t+=dt;
+    if (y > res.apY){ res.apY=y; res.apX=x; }
+    if (rec) res.pts.push([x,y,t]);
+  }
+  res.range=x; res.t=t; res.vx=vx; res.vy=vy;
+  return res;
+}
+const minAngle = () => S.h0 > 0 ? -45 : 0;
+
+function optimize(){
+  let bestR=-1, bestA=0;
+  for (let a=minAngle(); a<=90; a+=0.5){ const r=sim(a).range; if (r>bestR){bestR=r;bestA=a;} }
+  let lo=Math.max(minAngle(),bestA-0.5), hi=Math.min(90,bestA+0.5);
+  const gr=(Math.sqrt(5)-1)/2;
+  let c=hi-gr*(hi-lo), d=lo+gr*(hi-lo), fc=sim(c).range, fd=sim(d).range;
+  for (let i=0;i<40;i++){
+    if (fc>fd){ hi=d; d=c; fd=fc; c=hi-gr*(hi-lo); fc=sim(c).range; }
+    else      { lo=c; c=d; fc=fd; d=lo+gr*(hi-lo); fd=sim(d).range; }
+  }
+  opt = sim((lo+hi)/2, true);
+  vert = sim(90);
+}
+
+/* ---------- canvas ---------- */
+const cv = document.getElementById('cv'), ctx = cv.getContext('2d');
+let W=0, H=0, DPR=1;
+function resize(){
+  const r = cv.getBoundingClientRect(); DPR = Math.min(window.devicePixelRatio||1, 2);
+  W = r.width; H = r.height; cv.width = Math.round(W*DPR); cv.height = Math.round(H*DPR);
+  ctx.setTransform(DPR,0,0,DPR,0,0); draw();
+}
+new ResizeObserver(resize).observe(cv);
+
+function niceStep(raw){
+  const p = Math.pow(10, Math.floor(Math.log10(raw))), m = raw/p;
+  return (m<1.5?1:m<3.5?2:m<7.5?5:10)*p;
+}
+const nf = (n,d=0) => n.toLocaleString('ru-RU',{minimumFractionDigits:d,maximumFractionDigits:d});
+const dist = m => Math.abs(m) >= 10000 ? nf(m/1000,2)+' км' : nf(m, m<100?1:0)+' м';
+
+function computeView(){
+  const pl=58, pr=34, pt=56, pb=40;
+  const spanX = Math.max(opt.range, 1);
+  const spanY = Math.max(vert.apY, S.h0, 1);
+  const s = Math.min((W-pl-pr)/(spanX*1.04), (H-pt-pb)/(spanY*1.06));
+  const gy = H-pb, ox = pl;
+  view = {s, ox, gy, X:x=>ox+x*s, Y:y=>gy-y*s};
+}
+
+function glowLine(pts, color, width, blur, dash){
+  ctx.save(); ctx.strokeStyle=color; ctx.lineWidth=width; ctx.shadowColor=color; ctx.shadowBlur=blur;
+  ctx.setLineDash(dash||[]); ctx.beginPath();
+  pts.forEach((p,i)=> i?ctx.lineTo(p[0],p[1]):ctx.moveTo(p[0],p[1])); ctx.stroke(); ctx.restore();
+}
+function label(text, x, y, color, align, sub){
+  ctx.save(); ctx.font = `700 12px ${FD}`; ctx.textBaseline='bottom';
+  const w = Math.max(ctx.measureText(text).width, sub ? (ctx.font=`400 11px ${FM}`, ctx.measureText(sub).width) : 0);
+  ctx.font = `700 12px ${FD}`;
+  let ax = align==='right' ? x-w-10 : x+10;
+  ax = Math.max(6, Math.min(W-w-14, ax));
+  const h = sub ? 34 : 20;
+  ctx.fillStyle = 'rgba(0,33,43,.82)'; ctx.fillRect(ax-5, y-h, w+10, h+2);
+  ctx.fillStyle = color; ctx.fillRect(ax-5, y-h, 2, h+2);
+  ctx.fillText(text, ax, sub ? y-16 : y-2);
+  if (sub){ ctx.font=`400 11px ${FM}`; ctx.fillStyle=P.b0; ctx.fillText(sub, ax, y-1); }
+  ctx.restore();
+}
+
+let pulse = 0;
+function draw(){
+  if (!W || !cur) return;
+  computeView();
+  const {s, X, Y, gy, ox} = view;
+  ctx.clearRect(0,0,W,H);
+  const g = ctx.createRadialGradient(W*0.35,H*0.7,0,W*0.35,H*0.7,Math.max(W,H));
+  g.addColorStop(0,'#003542'); g.addColorStop(1,P.b03); ctx.fillStyle=g; ctx.fillRect(0,0,W,H);
+
+  // grid
+  const step = niceStep(80/s);
+  ctx.font = `400 10px ${FM}`; ctx.lineWidth=1;
+  for (let x=0; X(x)<W; x+=step){
+    ctx.strokeStyle = P.b02; ctx.beginPath(); ctx.moveTo(X(x)+.5,0); ctx.lineTo(X(x)+.5,gy); ctx.stroke();
+    ctx.fillStyle = P.b01; ctx.textAlign='center'; ctx.textBaseline='top'; ctx.fillText(dist(x), X(x), gy+8);
+  }
+  for (let y=step; Y(y)>20; y+=step){
+    ctx.strokeStyle = P.b02; ctx.beginPath(); ctx.moveTo(ox,Y(y)+.5); ctx.lineTo(W,Y(y)+.5); ctx.stroke();
+    ctx.fillStyle = P.b01; ctx.textAlign='right'; ctx.textBaseline='middle'; ctx.fillText(dist(y), ox-8, Y(y));
+  }
+  // ground
+  ctx.save(); ctx.fillStyle='rgba(42,161,152,.06)'; ctx.fillRect(0,gy,W,H-gy);
+  ctx.strokeStyle='rgba(42,161,152,.18)'; ctx.beginPath();
+  for (let x=-H; x<W; x+=10){ ctx.moveTo(x,H); ctx.lineTo(x+(H-gy),gy); } ctx.stroke(); ctx.restore();
+  glowLine([[0,gy],[W,gy]], P.cy, 1.5, 10);
+
+  // launch tower
+  const px = X(0), py = Y(S.h0);
+  if (S.h0 > 0){
+    ctx.save(); ctx.strokeStyle=P.vi; ctx.lineWidth=1.5; ctx.shadowColor=P.vi; ctx.shadowBlur=8;
+    ctx.strokeRect(px-9, py, 18, gy-py);
+    ctx.beginPath(); for (let yy=py; yy<gy-12; yy+=14){ ctx.moveTo(px-9,yy); ctx.lineTo(px+9,yy+14); ctx.moveTo(px+9,yy); ctx.lineTo(px-9,yy+14);} ctx.stroke();
+    ctx.restore();
+  }
+
+  // optimal ghost trajectory + beacon
+  glowLine(opt.pts.map(p=>[X(p[0]),Y(p[1])]), 'rgba(181,137,0,.75)', 1.2, 6, [6,6]);
+  const mx = X(opt.range), beaconTop = Math.max(64, gy-110);
+  ctx.save(); ctx.strokeStyle='rgba(181,137,0,.55)'; ctx.setLineDash([2,4]); ctx.beginPath(); ctx.moveTo(mx,gy); ctx.lineTo(mx,beaconTop); ctx.stroke(); ctx.restore();
+  ctx.save(); ctx.translate(mx, gy); ctx.rotate(Math.PI/4); ctx.fillStyle=P.yl; ctx.shadowColor=P.yl; ctx.shadowBlur=14;
+  ctx.fillRect(-6,-6,12,12); ctx.fillStyle=P.b03; ctx.fillRect(-2.5,-2.5,5,5); ctx.restore();
+  label('МАКС. ДАЛЬНОСТЬ '+dist(opt.range), mx, beaconTop, P.yl, mx > W*0.6 ? 'right' : 'left', 'при угле '+nf(opt.deg,1)+'°');
+
+  // apex trail
+  if (S.trail && trail.size){
+    ctx.save(); ctx.fillStyle='rgba(42,161,152,.55)'; ctx.shadowColor=P.cy; ctx.shadowBlur=4;
+    for (const [tx,ty] of trail.values()){ ctx.fillRect(X(tx)-1.25, Y(ty)-1.25, 2.5, 2.5); }
+    ctx.restore();
+  }
+
+  // current trajectory
+  const pts = cur.pts.map(p=>[X(p[0]),Y(p[1])]);
+  if (pts.length > 1){
+    ctx.save(); const lg = ctx.createLinearGradient(px,0,X(Math.max(cur.range,1)),0);
+    lg.addColorStop(0,P.cy); lg.addColorStop(1,P.mg);
+    ctx.strokeStyle=lg; ctx.lineWidth=2.5; ctx.shadowColor=P.cy; ctx.shadowBlur=16; ctx.lineJoin='round';
+    ctx.beginPath(); pts.forEach((p,i)=> i?ctx.lineTo(p[0],p[1]):ctx.moveTo(p[0],p[1])); ctx.stroke(); ctx.restore();
+    // time ticks
+    const tStep = niceStep(Math.max(cur.t,0.01)/14);
+    let next = tStep;
+    ctx.fillStyle=P.b1;
+    for (const p of cur.pts){ if (p[2] >= next){ ctx.beginPath(); ctx.arc(X(p[0]),Y(p[1]),2,0,7); ctx.fill(); next += tStep; } }
+  }
+
+  // apex
+  if (cur.apY > S.h0 + 0.01){
+    const ax = X(cur.apX), ay = Y(cur.apY);
+    ctx.save(); ctx.strokeStyle='rgba(42,161,152,.5)'; ctx.setLineDash([3,4]);
+    ctx.beginPath(); ctx.moveTo(ax,ay); ctx.lineTo(ax,gy); ctx.stroke(); ctx.restore();
+    ctx.save(); ctx.fillStyle=P.cy; ctx.shadowColor=P.cy; ctx.shadowBlur=10;
+    ctx.beginPath(); ctx.moveTo(ax,ay-7); ctx.lineTo(ax+6,ay+4); ctx.lineTo(ax-6,ay+4); ctx.closePath(); ctx.fill(); ctx.restore();
+    label('АПОГЕЙ '+dist(cur.apY), ax, ay-10, P.cy, ax > W*0.6 ? 'right' : 'left');
+  }
+
+  // impact
+  const ix = X(cur.range);
+  const r = 9 + Math.sin(pulse)*2.5;
+  ctx.save(); ctx.strokeStyle=P.mg; ctx.lineWidth=1.5; ctx.shadowColor=P.mg; ctx.shadowBlur=14;
+  ctx.beginPath(); ctx.arc(ix,gy,r,0,7); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(ix-r-6,gy); ctx.lineTo(ix-r+3,gy); ctx.moveTo(ix+r-3,gy); ctx.lineTo(ix+r+6,gy);
+  ctx.moveTo(ix,gy-r-6); ctx.lineTo(ix,gy-r+3); ctx.stroke();
+  ctx.fillStyle=P.mg; ctx.beginPath(); ctx.arc(ix,gy,2.5,0,7); ctx.fill(); ctx.restore();
+  // range bracket
+  ctx.save(); ctx.strokeStyle='rgba(211,54,130,.55)'; ctx.lineWidth=1;
+  const by = gy+24; ctx.beginPath(); ctx.moveTo(px,by-4); ctx.lineTo(px,by+4); ctx.moveTo(px,by); ctx.lineTo(ix,by); ctx.moveTo(ix,by-4); ctx.lineTo(ix,by+4); ctx.stroke(); ctx.restore();
+  const nearMax = Math.abs(ix-mx) < 150;
+  label('ПАДЕНИЕ '+dist(cur.range), ix, gy-(nearMax?40:16), P.mg, ix > W*0.6 ? 'right' : 'left', 't = '+nf(cur.t,2)+' с');
+
+  // cursor ray
+  if (S.cursor && !S.locked){
+    ctx.save(); ctx.strokeStyle='rgba(147,161,161,.18)'; ctx.setLineDash([1,5]);
+    ctx.beginPath(); ctx.moveTo(px,py); ctx.lineTo(S.cursor[0],S.cursor[1]); ctx.stroke(); ctx.restore();
+  }
+
+  // cannon + angle arc
+  const a = -S.angle*Math.PI/180;
+  ctx.save(); ctx.strokeStyle='rgba(203,75,22,.8)'; ctx.lineWidth=1;
+  ctx.beginPath(); ctx.moveTo(px,py); ctx.lineTo(px+60,py); ctx.stroke();
+  ctx.beginPath(); ctx.arc(px,py,44, Math.min(0,a), Math.max(0,a)); ctx.stroke();
+  ctx.font=`700 12px ${FD}`; ctx.fillStyle=P.or; ctx.textBaseline='middle';
+  const mid=a/2; ctx.fillText(nf(S.angle,1)+'°', px+52*Math.cos(mid)+4, py+52*Math.sin(mid)+(S.angle<8?-10:0));
+  ctx.translate(px,py); ctx.rotate(a);
+  ctx.fillStyle=P.b02; ctx.strokeStyle=P.cy; ctx.lineWidth=1.5; ctx.shadowColor=P.cy; ctx.shadowBlur=10;
+  ctx.fillRect(0,-4,34,8); ctx.strokeRect(0,-4,34,8);
+  ctx.rotate(-a); ctx.beginPath(); ctx.arc(0,0,9,0,7); ctx.fill(); ctx.stroke();
+  ctx.restore();
+}
+
+/* ---------- state & UI ---------- */
+const $ = id => document.getElementById(id);
+function update(reopt){
+  if (reopt){ optimize(); trail.clear(); }
+  S.angle = Math.max(minAngle(), Math.min(90, S.angle));
+  cur = sim(S.angle, true);
+  if (S.trail && cur.apY > S.h0 + 0.01) trail.set(Math.round(S.angle*10), [cur.apX, cur.apY]);
+  $('trailN').textContent = S.trail && trail.size ? trail.size+' точ.' : '';
+  $('angleBig').innerHTML = nf(S.angle,1)+'<small>°</small>';
+  $('rRange').textContent = dist(cur.range);
+  $('rApex').textContent = dist(cur.apY);
+  $('rTime').textContent = nf(cur.t,2)+' с';
+  $('rVimp').textContent = nf(Math.hypot(cur.vx,cur.vy),1)+' м/с';
+  $('rAimp').textContent = nf(Math.abs(Math.atan2(cur.vy,cur.vx))*180/Math.PI,1)+'°';
+  $('rPct').textContent = opt.range>0 ? nf(cur.range/opt.range*100,1)+' %' : '—';
+  $('mRange').textContent = dist(opt.range);
+  $('mAngle').textContent = nf(opt.deg,1)+'°';
+  $('optTag').textContent = Math.abs(S.angle-opt.deg) < 0.15 ? 'оптимум' : '';
+  $('optTag').style.color = P.yl;
+  draw();
+}
+
+function setLocked(v){
+  S.locked = v;
+  $('lockBtn').setAttribute('aria-pressed', v);
+  $('lockBtn').textContent = v ? 'Снять фиксацию' : 'Зафиксировать угол';
+  const m=$('mode'); m.textContent = v ? 'LOCK' : 'LIVE'; m.className = 'chip ' + (v?'lock':'live');
+}
+
+function aimAt(e){
+  const r = cv.getBoundingClientRect();
+  const x = e.clientX - r.left, y = e.clientY - r.top;
+  S.cursor = [x,y];
+  if (S.locked || !view) { draw(); return; }
+  const dx = x - view.X(0), dy = view.Y(S.h0) - y;
+  S.angle = dx <= 0 ? (dy >= 0 ? 90 : minAngle()) : Math.atan2(dy,dx)*180/Math.PI;
+  update(false);
+}
+cv.addEventListener('pointermove', aimAt);
+cv.addEventListener('pointerdown', e => {
+  if (e.pointerType === 'mouse'){ setLocked(!S.locked); if (!S.locked) aimAt(e); else draw(); }
+  else { setLocked(false); aimAt(e); }
+});
+cv.addEventListener('pointerleave', () => { S.cursor=null; draw(); });
+$('lockBtn').addEventListener('click', () => { setLocked(!S.locked); draw(); });
+
+window.addEventListener('keydown', e => {
+  if (e.target.tagName === 'INPUT' && e.target.type === 'range') return;
+  const d = e.shiftKey ? 1 : 0.1;
+  if (['ArrowLeft','ArrowDown'].includes(e.key)){ setLocked(true); S.angle -= d; update(false); e.preventDefault(); }
+  else if (['ArrowRight','ArrowUp'].includes(e.key)){ setLocked(true); S.angle += d; update(false); e.preventDefault(); }
+  else if (e.key === ' ' && e.target === document.body){ setLocked(!S.locked); draw(); e.preventDefault(); }
+  else if (e.key.toLowerCase() === 'o'){ setLocked(true); S.angle = opt.deg; update(false); }
+});
+
+function readParams(){
+  S.v0 = +$('v0').value; S.h0 = +$('h0').value; S.k = +$('kd').value * 1e-4;
+  $('v0o').textContent = S.v0+' м/с';
+  $('h0o').textContent = S.h0+' м';
+  $('kdo').textContent = S.k === 0 ? 'вакуум' : 'k = '+nf(S.k,4)+' 1/м';
+  $('go').textContent = nf(S.g,2)+' м/с²';
+}
+let raf = 0;
+['v0','h0','kd'].forEach(id => $(id).addEventListener('input', () => {
+  readParams(); cancelAnimationFrame(raf); raf = requestAnimationFrame(() => update(true));
+}));
+document.querySelectorAll('.seg button').forEach(b => b.addEventListener('click', () => {
+  document.querySelectorAll('.seg button').forEach(x => x.setAttribute('aria-pressed', x===b));
+  S.g = +b.dataset.g; readParams(); update(true);
+}));
+$('trail').addEventListener('change', e => { S.trail = e.target.checked; trail.clear(); update(false); });
+
+readParams(); update(true);
+
+if (!matchMedia('(prefers-reduced-motion: reduce)').matches){
+  const loop = () => { pulse += 0.08; draw(); requestAnimationFrame(loop); };
+  requestAnimationFrame(loop);
+}
+document.fonts && document.fonts.ready.then(draw);
+})();
+</script>
+
+</body></html>
